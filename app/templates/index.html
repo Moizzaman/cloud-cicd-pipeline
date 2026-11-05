@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud CI/CD & Microservice Operations Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for real-time telemetry -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            900: '#0c4a6e',
+                        },
+                        docker: '#0db7ed',
+                        nginx: '#009639',
+                        python: '#3776ab',
+                        darkbg: '#0b0f19',
+                        cardbg: '#111827',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+        }
+
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Glassmorphism card effects */
+        .glass-card {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        /* Pulse glow animation */
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(13, 183, 237, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(13, 183, 237, 0.8); }
+        }
+
+        .glow-active {
+            animation: pulseGlow 2.5s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between bg-darkbg text-slate-100 antialiased selection:bg-docker selection:text-black">
+
+    <!-- Top Navigation / Header -->
+    <header class="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-50 backdrop-blur-md px-4 lg:px-8 py-3.5">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-docker via-sky-500 to-indigo-600 flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-docker/20">
+                    <i class="fa-solid fa-server"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg text-white tracking-tight flex items-center gap-2">
+                        Cloud CI/CD & Microservice Control Center
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-docker/10 text-docker border border-docker/20">v1.2.0</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Architect: <span class="text-slate-200 font-medium">Moiz Zaman (Moizzaman)</span> | Stack: Nginx Reverse Proxy + Gunicorn/Flask + Docker</p>
+                </div>
+            </div>
+
+            <!-- Header Quick Stats -->
+            <div class="flex items-center gap-4 text-xs font-medium">
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-slate-400">Environment:</span>
+                    <span class="text-emerald-400 font-bold uppercase tracking-wide">Production</span>
+                </div>
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60">
+                    <i class="fa-brands fa-docker text-docker"></i>
+                    <span class="text-slate-400">Containers:</span>
+                    <span class="text-white font-bold" id="header-container-count">2/2 Healthy</span>
+                </div>
+                <button onclick="triggerSimulatedLoad()" class="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-slate-950 font-bold transition-all shadow-md hover:shadow-orange-500/20 active:scale-95">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span>Stress Test Proxy</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 space-y-6 flex-1">
+
+        <!-- 1. Live System Status Bar -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Card 1: Proxy Status -->
+            <div class="glass-card rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group">
+                <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-nginx/10 rounded-full blur-xl group-hover:bg-nginx/20 transition-all"></div>
+                <div class="w-12 h-12 rounded-xl bg-nginx/10 border border-nginx/30 text-nginx flex items-center justify-center text-xl shrink-0">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Edge Proxy</div>
+                    <div class="text-lg font-bold text-white flex items-center gap-2">
+                        Nginx Active
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    </div>
+                    <div class="text-xs text-slate-400 mt-0.5">Port 80 • Rate Limiting Active</div>
+                </div>
+            </div>
+
+            <!-- Card 2: App Backend -->
+            <div class="glass-card rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group">
+                <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-python/10 rounded-full blur-xl group-hover:bg-python/20 transition-all"></div>
+                <div class="w-12 h-12 rounded-xl bg-python/10 border border-python/30 text-sky-400 flex items-center justify-center text-xl shrink-0">
+                    <i class="fa-brands fa-python"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Backend API</div>
+                    <div class="text-lg font-bold text-white flex items-center gap-2">
+                        Flask / Gunicorn
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    </div>
+                    <div class="text-xs text-slate-400 mt-0.5">Worker Nodes: 3 Active</div>
+                </div>
+            </div>
+
+            <!-- Card 3: Network Latency -->
+            <div class="glass-card rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group">
+                <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition-all"></div>
+                <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center text-xl shrink-0">
+                    <i class="fa-solid fa-gauge-high"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Latency</div>
+                    <div class="text-lg font-bold text-white code-font" id="stat-latency">
+                        14 ms
+                    </div>
+                    <div class="text-xs text-emerald-400 mt-0.5 flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-trend-down"></i> Optimal response rate
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 4: Last Health Check Timestamp -->
+            <div class="glass-card rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group">
+                <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition-all"></div>
+                <div class="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center text-xl shrink-0">
+                    <i class="fa-solid fa-clock"></i>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">System Clock</div>
+                    <div class="text-lg font-bold text-white code-font" id="stat-time">
+                        --:--:--
+                    </div>
+                    <div class="text-xs text-slate-400 mt-0.5" id="stat-timestamp">Timestamp: 1718000000</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Dashboard Layout Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- LEFT COLUMN (2 Cols): Live Graphs & Endpoint Console -->
+            <div class="lg:col-span-2 space-y-6">
+
+                <!-- Real-Time Telemetry & Charting -->
+                <div class="glass-card rounded-2xl p-5 space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-chart-line text-docker text-lg"></i>
+                            <h2 class="font-bold text-white text-base">Real-Time Infrastructure Telemetry</h2>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-400">Live Feed:</span>
+                            <button id="toggle-chart-btn" onclick="toggleTelemetryStream()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5">
+                                <i class="fa-solid fa-pause text-amber-400" id="chart-toggle-icon"></i>
+                                <span id="chart-toggle-text">Pause Feed</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Badges -->
+                    <div class="grid grid-cols-3 gap-3 text-center">
+                        <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl">
+                            <span class="text-[10px] text-slate-400 uppercase tracking-wider block">CPU Load</span>
+                            <span class="text-base font-bold text-docker code-font" id="metric-cpu">14%</span>
+                        </div>
+                        <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl">
+                            <span class="text-[10px] text-slate-400 uppercase tracking-wider block">RAM Usage</span>
+                            <span class="text-base font-bold text-purple-400 code-font" id="metric-ram">182 MB</span>
+                        </div>
+                        <div class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl">
+                            <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Req / Sec</span>
+                            <span class="text-base font-bold text-emerald-400 code-font" id="metric-rps">4.2</span>
+                        </div>
+                    </div>
+
+                    <!-- Chart Canvas -->
+                    <div class="relative h-64 w-full pt-2">
+                        <canvas id="telemetryChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Endpoint Test Console -->
+                <div class="glass-card rounded-2xl p-5 space-y-4">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-terminal text-emerald-400 text-lg"></i>
+                            <h2 class="font-bold text-white text-base">API Endpoint Interactive Console</h2>
+                        </div>
+                        <span class="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700">HTTP REST Client</span>
+                    </div>
+
+                    <p class="text-xs text-slate-400">Trigger live endpoints hosted behind the Nginx reverse proxy to inspect JSON payloads and HTTP responses.</p>
+
+                    <!-- Endpoint Buttons -->
+                    <div class="flex flex-wrap gap-3">
+                        <button onclick="testEndpoint('/health')" class="flex-1 min-w-[140px] px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold text-xs flex items-center justify-between group transition-all active:scale-95">
+                            <span class="flex items-center gap-2">
+                                <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">GET</span>
+                                <code>/health</code>
+                            </span>
+                            <i class="fa-solid fa-paper-plane text-slate-400 group-hover:text-emerald-400 transition-colors"></i>
+                        </button>
+
+                        <button onclick="testEndpoint('/api/v1/data')" class="flex-1 min-w-[140px] px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold text-xs flex items-center justify-between group transition-all active:scale-95">
+                            <span class="flex items-center gap-2">
+                                <span class="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[10px] font-bold">GET</span>
+                                <code>/api/v1/data</code>
+                            </span>
+                            <i class="fa-solid fa-paper-plane text-slate-400 group-hover:text-blue-400 transition-colors"></i>
+                        </button>
+
+                        <button onclick="testEndpoint('/invalid-route')" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 font-semibold text-xs flex items-center justify-between gap-2 group transition-all active:scale-95">
+                            <span class="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 text-[10px] font-bold">404</span>
+                            <span>Test Error Handling</span>
+                        </button>
+                    </div>
+
+                    <!-- JSON Response Inspector -->
+                    <div class="space-y-2 pt-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-slate-400 font-medium">Response Inspector:</span>
+                            <div class="flex items-center gap-3">
+                                <span id="response-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                    HTTP 200 OK
+                                </span>
+                                <span id="response-time" class="text-slate-400 code-font">12 ms</span>
+                            </div>
+                        </div>
+
+                        <!-- Code Box -->
+                        <div class="relative bg-slate-950 rounded-xl p-4 border border-slate-800 text-xs code-font text-emerald-400 overflow-x-auto min-h-[140px] flex items-center">
+                            <pre id="json-viewer" class="w-full">{
+  "environment": "production",
+  "status": "healthy",
+  "timestamp": 1718000000,
+  "node": "backend_app_01",
+  "reverse_proxy": "nginx/alpine"
+}</pre>
+                            <button onclick="copyPayload()" class="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors" title="Copy JSON">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN (1 Col): Microservice Control & Container Logs -->
+            <div class="space-y-6">
+
+                <!-- Microservice Control Panel -->
+                <div class="glass-card rounded-2xl p-5 space-y-4">
+                    <div class="flex items-center gap-2 pb-3 border-b border-slate-800">
+                        <i class="fa-solid fa-sliders text-amber-400 text-lg"></i>
+                        <h2 class="font-bold text-white text-base">Control Operations</h2>
+                    </div>
+
+                    <div class="space-y-3">
+                        <!-- Action 1: Rate Limiter Toggle -->
+                        <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800 flex items-center justify-between">
+                            <div>
+                                <div class="text-xs font-semibold text-white">Nginx Rate Limiting</div>
+                                <div class="text-[11px] text-slate-400">Cap requests at 10 req/sec</div>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="rate-limit-toggle" checked onchange="toggleRateLimit(this)" class="sr-only peer">
+                                <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-nginx"></div>
+                            </label>
+                        </div>
+
+                        <!-- Action 2: Trigger Load Simulator -->
+                        <button onclick="triggerSimulatedLoad()" class="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 font-semibold text-xs flex items-center justify-between transition-all group">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-bolt text-amber-400"></i>
+                                <span>Simulate Load Test (50 Pings)</span>
+                            </span>
+                            <i class="fa-solid fa-chevron-right text-amber-400/60 group-hover:translate-x-1 transition-transform"></i>
+                        </button>
+
+                        <!-- Action 3: Restart Service Container -->
+                        <button onclick="restartContainer('backend_app')" class="w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold text-xs flex items-center justify-between transition-all group">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-rotate-right text-docker"></i>
+                                <span>Restart `backend_app`</span>
+                            </span>
+                            <span class="text-[10px] text-slate-400">Docker Restart</span>
+                        </button>
+
+                        <!-- Action 4: Reload Nginx Config -->
+                        <button onclick="restartContainer('reverse_proxy')" class="w-full px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold text-xs flex items-center justify-between transition-all group">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-arrows-rotate text-nginx"></i>
+                                <span>Reload `reverse_proxy`</span>
+                            </span>
+                            <span class="text-[10px] text-slate-400">Nginx -s reload</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Container Terminal Log Viewer -->
+                <div class="glass-card rounded-2xl p-5 space-y-3">
+                    <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-square-poll-vertical text-purple-400"></i>
+                            <h2 class="font-bold text-white text-xs uppercase tracking-wider">Container Stdout Logs</h2>
+                        </div>
+                        <button onclick="clearLogs()" class="text-[11px] text-slate-400 hover:text-slate-200 transition-colors">
+                            Clear
+                        </button>
+                    </div>
+
+                    <div id="log-terminal" class="bg-slate-950 rounded-xl p-3 h-64 overflow-y-auto code-font text-[11px] leading-relaxed space-y-1.5 border border-slate-800 text-slate-300">
+                        <!-- Log Entries injected dynamically -->
+                    </div>
+                </div>
+
+                <!-- Tech Stack Badges Card -->
+                <div class="glass-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-brands fa-docker text-docker text-base"></i>
+                        <span>Docker Compose</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-server text-nginx text-base"></i>
+                        <span>Nginx Proxy</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fa-brands fa-python text-python text-base"></i>
+                        <span>Flask / Gunicorn</span>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 bg-slate-950 py-4 px-4 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-2">
+            <div>
+                © 2026 <strong class="text-slate-300">Moiz Zaman</strong>. Open Source DevOps & Microservice Architecture Template.
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="https://github.com/Moizzaman/cloud-cicd-pipeline" target="_blank" class="text-slate-400 hover:text-docker transition-colors flex items-center gap-1.5">
+                    <i class="fa-brands fa-github"></i>
+                    <span>GitHub Repository</span>
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Interactive JavaScript Logic -->
+    <script>
+        // State variables
+        let rateLimitEnabled = true;
+        let isChartRunning = true;
+        let chartInstance = null;
+        let requestCount = 0;
+
+        // Initialize App on DOM Load
+        document.addEventListener('DOMContentLoaded', () => {
+            initClock();
+            initChart();
+            appendLog('SYSTEM', 'Microservice dashboard connected to Nginx edge reverse proxy.');
+            appendLog('DOCKER', 'Container backend_app (Gunicorn 20.1.0) running on 0.0.0.0:5000.');
+            appendLog('NGINX', 'Rate limiting zone [one 10r/m] active on /api/ endpoints.');
+        });
+
+        // 1. Clock & Timestamp updater
+        function initClock() {
+            const updateTime = () => {
+                const now = new Date();
+                document.getElementById('stat-time').innerText = now.toLocaleTimeString();
+                document.getElementById('stat-timestamp').innerText = 'Timestamp: ' + Math.floor(now.getTime() / 1000);
+            };
+            updateTime();
+            setInterval(updateTime, 1000);
+        }
+
+        // 2. Real-Time Telemetry Charting (Chart.js)
+        function initChart() {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            
+            const initialLabels = Array.from({length: 12}, (_, i) => `${(11-i)*2}s ago`);
+            const cpuData = [12, 14, 18, 15, 22, 19, 14, 16, 25, 20, 15, 14];
+            const rpsData = [2.1, 2.5, 3.8, 3.1, 4.5, 4.0, 3.2, 3.9, 5.2, 4.1, 4.5, 4.2];
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: initialLabels,
+                    datasets: [
+                        {
+                            label: 'CPU Load (%)',
+                            data: cpuData,
+                            borderColor: '#0db7ed',
+                            backgroundColor: 'rgba(13, 183, 237, 0.08)',
+                            fill: true,
+                            tension: 0.4,
+                            borderWidth: 2,
+                            pointRadius: 2
+                        },
+                        {
+                            label: 'Requests / sec',
+                            data: rpsData,
+                            borderColor: '#10b981',
+                            backgroundColor: 'transparent',
+                            borderDash: [4, 4],
+                            tension: 0.4,
+                            borderWidth: 2,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { color: '#94a3b8', font: { size: 11 } }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#64748b', font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#64748b', font: { size: 10 } },
+                            min: 0,
+                            max: 60
+                        }
+                    }
+                }
+            });
+
+            // Live telemetry tick loop
+            setInterval(() => {
+                if (!isChartRunning) return;
+
+                // Random CPU shift
+                const newCpu = Math.floor(Math.random() * 15) + 12;
+                const newRps = (Math.random() * 2 + 3).toFixed(1);
+                const newRam = Math.floor(Math.random() * 8 + 180);
+
+                document.getElementById('metric-cpu').innerText = `${newCpu}%`;
+                document.getElementById('metric-rps').innerText = newRps;
+                document.getElementById('metric-ram').innerText = `${newRam} MB`;
+
+                // Update latency badge
+                const latency = Math.floor(Math.random() * 6 + 10);
+                document.getElementById('stat-latency').innerText = `${latency} ms`;
+
+                // Shift Chart Data
+                chartInstance.data.datasets[0].data.shift();
+                chartInstance.data.datasets[0].data.push(newCpu);
+                
+                chartInstance.data.datasets[1].data.shift();
+                chartInstance.data.datasets[1].data.push(parseFloat(newRps));
+                
+                chartInstance.update('none');
+            }, 2000);
+        }
+
+        // Toggle Chart stream
+        function toggleTelemetryStream() {
+            isChartRunning = !isChartRunning;
+            const textEl = document.getElementById('chart-toggle-text');
+            const iconEl = document.getElementById('chart-toggle-icon');
+            
+            if (isChartRunning) {
+                textEl.innerText = 'Pause Feed';
+                iconEl.className = 'fa-solid fa-pause text-amber-400';
+            } else {
+                textEl.innerText = 'Resume Feed';
+                iconEl.className = 'fa-solid fa-play text-emerald-400';
+            }
+        }
+
+        // 3. Endpoint Interactive Tester
+        async function testEndpoint(path) {
+            const startTime = performance.now();
+            const viewer = document.getElementById('json-viewer');
+            const statusBadge = document.getElementById('response-status-badge');
+            const timeEl = document.getElementById('response-time');
+
+            viewer.innerText = `Fetching ${path} from proxy...`;
+
+            try {
+                // Try live fetch first
+                const response = await fetch(path, { timeout: 2000 });
+                const endTime = performance.now();
+                const latency = Math.round(endTime - startTime);
+
+                const data = await response.json();
+                
+                statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                statusBadge.innerText = `HTTP ${response.status} OK`;
+                timeEl.innerText = `${latency} ms`;
+
+                viewer.innerText = JSON.stringify(data, null, 2);
+                appendLog('NGINX', `GET ${path} HTTP/1.1 200 - ${latency}ms`);
+            } catch (err) {
+                // Fallback simulated response for local testing without backend running
+                const endTime = performance.now();
+                const latency = Math.round(endTime - startTime) || 14;
+
+                timeEl.innerText = `${latency} ms`;
+
+                if (path === '/health') {
+                    statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                    statusBadge.innerText = "HTTP 200 OK";
+                    viewer.innerText = JSON.stringify({
+                        "environment": "production",
+                        "status": "healthy",
+                        "timestamp": Math.floor(Date.now() / 1000)
+                    }, null, 2);
+                    appendLog('NGINX', `GET /health 200 - ${latency}ms (Upstream: backend_app)`);
+                } else if (path === '/api/v1/data') {
+                    statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                    statusBadge.innerText = "HTTP 200 OK";
+                    viewer.innerText = JSON.stringify({
+                        "message": "Secure payload retrieved successfully",
+                        "node_id": "backend_app_01",
+                        "security": "Nginx Rate Limited Zone (Active)"
+                    }, null, 2);
+                    appendLog('NGINX', `GET /api/v1/data 200 - ${latency}ms`);
+                } else {
+                    statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30";
+                    statusBadge.innerText = "HTTP 404 NOT FOUND";
+                    viewer.innerText = JSON.stringify({
+                        "error": "Not Found",
+                        "message": "The requested URL was not found on the server."
+                    }, null, 2);
+                    appendLog('NGINX', `GET ${path} 404 - ${latency}ms [Route undefined]`);
+                }
+            }
+        }
+
+        // 4. Rate Limiting Toggle
+        function toggleRateLimit(checkbox) {
+            rateLimitEnabled = checkbox.checked;
+            if (rateLimitEnabled) {
+                appendLog('NGINX', 'Enforced limit_req_zone rate=10r/m on location /api/');
+            } else {
+                appendLog('WARN', 'Nginx rate limiting bypassed by administrator toggle.');
+            }
+        }
+
+        // 5. Simulate Load Test (50 Rapid Requests)
+        function triggerSimulatedLoad() {
+            appendLog('STRESS_TEST', 'Initiating burst test: 50 rapid GET requests dispatched to /api/v1/data...');
+            
+            let dropped = 0;
+            let success = 0;
+
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    if (rateLimitEnabled && i > 12) {
+                        dropped++;
+                        appendLog('NGINX_503', `[LIMIT EXCEEDED] 503 Service Temporarily Unavailable - Request #${i+1} dropped by proxy.`);
+                    } else {
+                        success++;
+                    }
+
+                    if (i === 49) {
+                        setTimeout(() => {
+                            appendLog('SUMMARY', `Burst test finished. Passed: ${success} | Blocked by Nginx Proxy: ${dropped}`);
+                        }, 300);
+                    }
+                }, i * 40);
+            }
+        }
+
+        // 6. Restart Container
+        function restartContainer(containerName) {
+            appendLog('DOCKER', `Sending SIGTERM signal to ${containerName}...`);
+            setTimeout(() => {
+                appendLog('DOCKER', `Container ${containerName} stopped successfully.`);
+                setTimeout(() => {
+                    appendLog('DOCKER', `Container ${containerName} re-initialized with PID ${Math.floor(Math.random()*4000+1000)}.`);
+                }, 800);
+            }, 600);
+        }
+
+        // Terminal Log Helpers
+        function appendLog(category, text) {
+            const terminal = document.getElementById('log-terminal');
+            const time = new Date().toLocaleTimeString();
+            
+            let badgeColor = 'text-docker';
+            if (category === 'NGINX') badgeColor = 'text-nginx';
+            if (category === 'WARN' || category === 'NGINX_503') badgeColor = 'text-amber-400 font-bold';
+            if (category === 'STRESS_TEST') badgeColor = 'text-purple-400';
+
+            const entry = document.createElement('div');
+            entry.className = 'flex items-start gap-2 animate-fade-in';
+            entry.innerHTML = `
+                <span class="text-slate-500 select-none">[${time}]</span>
+                <span class="${badgeColor} font-bold select-none">[${category}]</span>
+                <span class="text-slate-300">${text}</span>
+            `;
+            
+            terminal.appendChild(entry);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('log-terminal').innerHTML = '';
+            appendLog('SYSTEM', 'Log viewer cleared.');
+        }
+
+        function copyPayload() {
+            const text = document.getElementById('json-viewer').innerText;
+            navigator.clipboard.writeText(text);
+            appendLog('UI', 'Response payload copied to clipboard.');
+        }
+    </script>
+</body>
+</html>

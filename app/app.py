@@ -2,12 +2,22 @@ import os
 import time
 from flask import Flask, jsonify, render_template
 
-app = Flask(__name__)
+# Get the absolute directory where app.py is located
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 
+# Explicitly bind Flask to the correct template folder
+app = Flask(__name__, template_folder=TEMPLATE_DIR)
 @app.route('/', methods=['GET'])
 def home():
-    # Renders the interactive dashboard UI from templates/index.html
-    return render_template('index.html')
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        return jsonify({
+            "error": "Could not render index.html template",
+            "details": str(e),
+            "looking_in": TEMPLATE_DIR
+        }), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -25,4 +35,4 @@ def get_data():
     }), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
