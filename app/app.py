@@ -1,8 +1,13 @@
 import os
 import time
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 
 app = Flask(__name__)
+
+@app.route('/', methods=['GET'])
+def home():
+    # Renders the interactive dashboard UI from templates/index.html
+    return render_template('index.html')
 
 @app.route('/health', methods=['GET'])
 def health_check():
